@@ -1,0 +1,28 @@
+version: '3.5'
+
+services:
+  postgres:
+    container_name: playlistgateway
+    image: postgres
+    environment:
+      POSTGRES_DB: financeme
+      POSTGRES_USER: ${POSTGRES_USER:-playlistgatewayadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-playlistgatewaydb}
+      PGDATA: /data/postgres
+    volumes:
+       - postgres:/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - postgres
+    restart: unless-stopped
+
+networks:
+  postgres:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.57.0/24
+
+volumes:
+  postgres:

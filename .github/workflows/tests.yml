@@ -1,0 +1,22 @@
+name: Build & Test Application
+
+on:
+  pull_request:
+    branches: [develop, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        node-version: [latest]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Using node ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{matrix.node-version}}
+      - run: yarn install && yarn build
+      - run: yarn test
