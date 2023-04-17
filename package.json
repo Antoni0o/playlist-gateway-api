@@ -68,7 +68,7 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "src/app/*.(t|j)s"
+      "app/**/*.tsx"
     ],
     "coverageThreshold": {
       "global": {

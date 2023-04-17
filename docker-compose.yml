@@ -5,7 +5,7 @@ services:
     container_name: playlistgateway
     image: postgres
     environment:
-      POSTGRES_DB: financeme
+      POSTGRES_DB: playlistgateway
       POSTGRES_USER: ${POSTGRES_USER:-playlistgatewayadmin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-playlistgatewaydb}
       PGDATA: /data/postgres
