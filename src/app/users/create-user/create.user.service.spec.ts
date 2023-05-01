@@ -58,7 +58,7 @@ describe('Create User Service', () => {
    * should receive user data from request && negation DONE
    * should validate received data && negation DONE
    * should create a code for mail validation DONE
-   * should send a mail with the code for validation && negation
+   * should send a mail with the code for validation && negation DONE
    * should verify received code with created code && negation
    * should create user && negation
    */

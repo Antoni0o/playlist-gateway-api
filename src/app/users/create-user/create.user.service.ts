@@ -19,10 +19,6 @@ export class CreateUserService {
 
   constructor(private readonly mail: SendGridService) {}
 
-  async execute() {
-    //to-do
-  }
-
   async validateReceivedData(
     createUserData: CreateUserDto,
   ): Promise<CreateUserDto> {
@@ -82,13 +78,34 @@ export class CreateUserService {
     return `Mail sent to: ${email}, with code: ${code}`;
   }
 
-  // async saveUser(createUserData: CreateUserDto) {
-  //   this.logger.log(`[Save] - Saving user`);
+  /**
+   * Create a field in User Entity called mailValidate(Boolean) to check if mail
+   * is trully validated and user can use the platform
+   * --
+   * First execute validation and save the user with mailValidate = false
+   * After that, validate the code and save the user with mailValidate = true
+   */
 
-  //   const user = this.repository.create(createUserData);
-  //   await this.repository.save(user);
+  // -------------- Code Whisperer Recomendation
+  // async validateMail(createUserData: CreateUserDto) {
+  //   this.logger.log(`[Validate Mail] - Starting to validate mail`);
 
-  //   this.logger.log(`[Save] - User saved`);
-  //   return user;
+  //   const validatedUser = await this.validateReceivedData(createUserData);
+  //   const mailValidationCode = this.createCodeForMailValidation();
+
+  //   const user = await this.saveUser({
+  //     ...validatedUser,
+  //     mailValidate: false,
+  //   });
+
+  //   const userWithCode = await this.saveUser({
+  //     ...user,
+  //     mailValidationCode,
+  //   });
+
+  //   this.logger.log(
+  //     `[Validate Mail] - Mail validated, user with code: ${mailValidationCode}`,
+  //   );
+  //   return userWithCode;
   // }
 }
