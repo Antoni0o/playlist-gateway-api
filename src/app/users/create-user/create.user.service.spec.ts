@@ -4,6 +4,9 @@ import { CreateUserService } from './create.user.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { CreateUserDto } from '../dto/create-user.dto';
+import { SendGridService } from '@anchan828/nest-sendgrid';
+import { SendGridServiceMock } from './mocks/sendgrid.service.mock';
+import { ConfigService } from '@nestjs/config';
 
 const user = new User({
   id: 'id',
@@ -18,11 +21,14 @@ const user = new User({
 describe('Create User Service', () => {
   let service: CreateUserService;
   let repository: Repository<User>;
+  let mail: SendGridService;
+  let config: ConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CreateUserService,
+        ConfigService,
         {
           provide: getRepositoryToken(User),
           useValue: {
@@ -30,11 +36,17 @@ describe('Create User Service', () => {
             findOneBy: jest.fn(),
           },
         },
+        {
+          provide: SendGridService,
+          useClass: SendGridServiceMock,
+        },
       ],
     }).compile();
 
     service = module.get<CreateUserService>(CreateUserService);
     repository = module.get<Repository<User>>(getRepositoryToken(User));
+    mail = module.get<SendGridService>(SendGridService);
+    config = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {
@@ -43,9 +55,9 @@ describe('Create User Service', () => {
   });
 
   /**
-   * should receive user data from request && negation
-   * should validate received data && negation
-   * should create a code for mail validation && negation
+   * should receive user data from request && negation DONE
+   * should validate received data && negation DONE
+   * should create a code for mail validation DONE
    * should send a mail with the code for validation && negation
    * should verify received code with created code && negation
    * should create user && negation
@@ -72,6 +84,39 @@ describe('Create User Service', () => {
       await expect(
         service.validateReceivedData(createUserDto),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('createCodeForMailValidation()', () => {
+    it('should create a code for mail validation', () => {
+      const code = service.createCodeForMailValidation();
+
+      expect(code).toHaveLength(6);
+    });
+  });
+
+  describe('sendMailValidationCode()', () => {
+    it('should send a mail with the code for validation', async () => {
+      const code = '123456';
+      const email = 'mail@mail.com';
+
+      jest.spyOn(service, 'createCodeForMailValidation').mockReturnValue(code);
+      jest.spyOn(mail, 'send').getMockImplementation();
+
+      const result = await service.sendMailValidationCode(email);
+
+      expect(mail.send).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(`Mail sent to: ${email}, with code: ${code}`);
+    });
+
+    it('should throw an error if mail not sent', async () => {
+      const code = '123456';
+      const email = 'mail@mail.com';
+
+      jest.spyOn(service, 'createCodeForMailValidation').mockReturnValue(code);
+      jest.spyOn(mail, 'send').mockRejectedValue(new Error());
+
+      await expect(service.sendMailValidationCode(email)).rejects.toThrow();
     });
   });
 });
