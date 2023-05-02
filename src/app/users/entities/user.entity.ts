@@ -25,6 +25,9 @@ export class User {
   @Column({ nullable: false })
   password: string;
 
+  @Column({ nullable: false, default: false })
+  isMailValidated: boolean;
+
   @CreateDateColumn({
     name: 'created_at',
     type: 'timestamp with time zone',

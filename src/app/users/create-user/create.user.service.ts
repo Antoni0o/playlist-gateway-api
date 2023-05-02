@@ -78,6 +78,20 @@ export class CreateUserService {
     return `Mail sent to: ${email}, with code: ${code}`;
   }
 
+  async createUser(createUserData: CreateUserDto): Promise<User> {
+    this.logger.log(`[Create User] - Starting to create user`);
+
+    const userData = await this.validateReceivedData(createUserData);
+
+    const user = new User();
+
+    Object.assign(user, userData);
+
+    this.sendMailValidationCode(createUserData.email);
+
+    this.logger.log(`[Create User] - User created`);
+    return await this.repository.save(user);
+  }
   /**
    * Create a field in User Entity called mailValidate(Boolean) to check if mail
    * is trully validated and user can use the platform
