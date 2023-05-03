@@ -38,6 +38,7 @@ describe('Create User Service', () => {
           useValue: {
             save: jest.fn(),
             findOneBy: jest.fn(),
+            update: jest.fn(),
           },
         },
         {
@@ -169,9 +170,51 @@ describe('Create User Service', () => {
     });
   });
 
-  // describe('verifyMailValidationCode()', () => {
-  //   it('should verify received code with created code', async () => {
-  //     const code = '123456';
-  //   });
-  // });
+  describe('validateMail()', () => {
+    const code = '123456';
+    const validatedUser = new User({
+      id: 'id',
+      name: 'name',
+      email: 'email',
+      avatarUrl: 'avatarUrl',
+      password: 'XXXXXXXX',
+      isMailValidated: true,
+      createdAt: new Date('01-01-2023'),
+      updatedAt: new Date('01-01-2023'),
+    });
+    it('should verify received code with created code', async () => {
+      const expectedCode = code;
+
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(user);
+      jest.spyOn(repository, 'save').mockResolvedValue(validatedUser);
+
+      const result = await service.validateMail(
+        expectedCode,
+        code,
+        validatedUser.id,
+      );
+
+      expect(result).toEqual(validatedUser);
+    });
+
+    it('should throw an error if user not found', async () => {
+      const expectedCode = code;
+
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+      await expect(
+        service.validateMail(expectedCode, code, validatedUser.id),
+      ).rejects.toThrow();
+    });
+
+    it('should throw an error if code is invalid', async () => {
+      const expectedCode = '122233';
+
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(user);
+
+      await expect(
+        service.validateMail(expectedCode, code, validatedUser.id),
+      ).rejects.toThrow();
+    });
+  });
 });

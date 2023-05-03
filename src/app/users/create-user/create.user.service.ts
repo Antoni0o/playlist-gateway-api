@@ -92,34 +92,37 @@ export class CreateUserService {
     this.logger.log(`[Create User] - User created`);
     return await this.repository.save(user);
   }
-  /**
-   * Create a field in User Entity called mailValidate(Boolean) to check if mail
-   * is trully validated and user can use the platform
-   * --
-   * First execute validation and save the user with mailValidate = false
-   * After that, validate the code and save the user with mailValidate = true
-   */
 
-  // -------------- Code Whisperer Recomendation
-  // async validateMail(createUserData: CreateUserDto) {
-  //   this.logger.log(`[Validate Mail] - Starting to validate mail`);
+  async validateMail(
+    expectedCode: string,
+    receivedCode: string,
+    userId: string,
+  ): Promise<User> {
+    this.logger.log(
+      `[Validate Mail] - Starting to validate mail with code: ${receivedCode}`,
+    );
+    const user: User = await this.repository.findOneBy({ id: userId });
 
-  //   const validatedUser = await this.validateReceivedData(createUserData);
-  //   const mailValidationCode = this.createCodeForMailValidation();
+    if (!user) {
+      this.logger.error(`[Validate Mail] - User not found`);
+      throw new AppError('User not found', HttpStatus.NOT_FOUND);
+    }
 
-  //   const user = await this.saveUser({
-  //     ...validatedUser,
-  //     mailValidate: false,
-  //   });
+    Object.assign(user, { mailValidate: true });
 
-  //   const userWithCode = await this.saveUser({
-  //     ...user,
-  //     mailValidationCode,
-  //   });
+    if (expectedCode === receivedCode) {
+      this.logger.log(
+        `[Validate Mail] - Mail validated, user with id: ${userId}`,
+      );
+      return await this.repository.save(user);
+    }
 
-  //   this.logger.log(
-  //     `[Validate Mail] - Mail validated, user with code: ${mailValidationCode}`,
-  //   );
-  //   return userWithCode;
-  // }
+    this.logger.error(
+      `[Validate Mail] - Error while validating mail, user with id: ${userId}`,
+    );
+    throw new AppError(
+      'Error while validating mail, try again later',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
 }
