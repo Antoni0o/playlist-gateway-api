@@ -3,9 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../entities/user.entity';
 import { Repository } from 'typeorm';
 import { CreateUserDto } from '../dto/create-user.dto';
-import { AppError } from '../../../common/errors/AppError';
+import { AppError } from '../../../common/errors/app.error';
 import { SendGridService } from '@anchan828/nest-sendgrid';
 import { ConfigService } from '@nestjs/config';
+import { UserCode } from '../entities/user-code.entity';
 
 @Injectable()
 export class CreateUserService {
@@ -13,7 +14,10 @@ export class CreateUserService {
   private readonly config: ConfigService;
 
   @InjectRepository(User)
-  private readonly repository: Repository<User>;
+  private readonly usersRepository: Repository<User>;
+
+  @InjectRepository(UserCode)
+  private readonly userCodesRepository: Repository<UserCode>;
 
   private readonly logger = new Logger(CreateUserService.name);
 
@@ -24,7 +28,7 @@ export class CreateUserService {
   ): Promise<CreateUserDto> {
     this.logger.log(`[Validate] - Received UserData: {${createUserData}}`);
 
-    const findUserByEmail = await this.repository.findOneBy({
+    const findUserByEmail = await this.usersRepository.findOneBy({
       email: createUserData.email,
     });
 
@@ -40,29 +44,28 @@ export class CreateUserService {
     return createUserData;
   }
 
-  createCodeForMailValidation(): string {
-    this.logger.log(`[Create Code] - Starting to create mail validation code`);
-    let code = '';
-
-    for (let i = 0; i < 6; i++) {
-      code = `${code}${Math.floor(Math.random() * 10)}`;
-    }
-
-    this.logger.log(`[Create Code] - Mail validation code created`);
-    return code;
-  }
-
   async sendMailValidationCode(email: string): Promise<string> {
     this.logger.log(`[Send Mail] - Starting to send mail validation code`);
+    const user = await this.usersRepository.findOneBy({ email: email });
 
-    const code = this.createCodeForMailValidation();
+    if (!user) {
+      this.logger.error(`[Send Mail] - User with this e-mail was not found`);
+      throw new AppError('User not found', HttpStatus.NOT_FOUND);
+    }
+
+    const userCode: UserCode = new UserCode();
+
+    user.userCode = userCode;
+
+    await this.userCodesRepository.save(userCode);
+    await this.usersRepository.save(user);
 
     try {
       await this.mail.send({
         to: email,
         from: this.config.get<string>('EMAIL_SENDER'),
         subject: 'Validation Code - Playlist Gateway',
-        text: `Your validation code is: ${code}`,
+        text: `Your validation code is: ${userCode.code}`,
       });
     } catch (e) {
       this.logger.error(`[Send Mail] - Error while sending mail`);
@@ -73,9 +76,9 @@ export class CreateUserService {
     }
 
     this.logger.log(
-      `[Send Mail] - Mail validation code sent to ${email} with code: ${code}`,
+      `[Send Mail] - Mail validation code sent to ${email} with code: ${userCode.code}`,
     );
-    return `Mail sent to: ${email}, with code: ${code}`;
+    return `Mail sent to: ${email}, with code: ${userCode.code}`;
   }
 
   async createUser(createUserData: CreateUserDto): Promise<User> {
@@ -90,18 +93,17 @@ export class CreateUserService {
     this.sendMailValidationCode(createUserData.email);
 
     this.logger.log(`[Create User] - User created`);
-    return await this.repository.save(user);
+    return await this.usersRepository.save(user);
   }
 
-  async validateMail(
-    expectedCode: string,
-    receivedCode: string,
-    userId: string,
-  ): Promise<User> {
+  async validateMail(receivedCode: string, userId: string): Promise<User> {
     this.logger.log(
       `[Validate Mail] - Starting to validate mail with code: ${receivedCode}`,
     );
-    const user: User = await this.repository.findOneBy({ id: userId });
+    const user: User[] = await this.usersRepository.find({
+      where: { id: userId },
+      relations: { userCode: true },
+    });
 
     if (!user) {
       this.logger.error(`[Validate Mail] - User not found`);
@@ -110,18 +112,19 @@ export class CreateUserService {
 
     Object.assign(user, { mailValidate: true });
 
-    if (expectedCode === receivedCode) {
+    if (user[0].userCode.code === receivedCode) {
       this.logger.log(
         `[Validate Mail] - Mail validated, user with id: ${userId}`,
       );
-      return await this.repository.save(user);
+      await this.userCodesRepository.delete(user[0].userCode.code);
+      return await this.usersRepository.save(user[0]);
     }
 
     this.logger.error(
-      `[Validate Mail] - Error while validating mail, user with id: ${userId}`,
+      `[Validate Mail] - Error while validating mail, expected code: [${user[0].userCode.code}] received code: [${receivedCode}]`,
     );
     throw new AppError(
-      'Error while validating mail, try again later',
+      'Error while validating mail, wrong code!',
       HttpStatus.BAD_REQUEST,
     );
   }

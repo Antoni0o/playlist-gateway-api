@@ -1,6 +1,6 @@
 import { QueryFailedError, Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
-import { CreateUserService } from './create.user.service';
+import { CreateUserService } from './create-user.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { CreateUserDto } from '../dto/create-user.dto';
@@ -8,25 +8,44 @@ import { SendGridService } from '@anchan828/nest-sendgrid';
 import { SendGridServiceMock } from './mocks/sendgrid.service.mock';
 import { ConfigService } from '@nestjs/config';
 import { HttpStatus } from '@nestjs/common';
-import { AppError } from '../../../common/errors/AppError';
+import { AppError } from '../../../common/errors/app.error';
+import { UserCode } from '../entities/user-code.entity';
 
-const user = new User({
-  id: 'id',
-  name: 'name',
-  email: 'email',
-  avatarUrl: 'avatarUrl',
-  password: 'XXXXXXXX',
-  isMailValidated: false,
-  createdAt: new Date('01-01-2023'),
-  updatedAt: new Date('01-01-2023'),
+jest.mock('../entities/user-code.entity', () => {
+  return {
+    UserCode: jest.fn().mockImplementation(() => {
+      return {
+        code: '',
+        createCode: jest.fn(),
+      };
+    }),
+  };
 });
 
 describe('Create User Service', () => {
   let service: CreateUserService;
-  let repository: Repository<User>;
+  let usersRepository: Repository<User>;
+  let userCodesRepository: Repository<UserCode>;
   let mail: SendGridService;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let config: ConfigService;
+  let user: User;
+  let userCode: UserCode;
+
+  beforeAll(() => {
+    user = new User({
+      id: 'id',
+      name: 'name',
+      email: 'email',
+      avatarUrl: 'avatarUrl',
+      password: 'XXXXXXXX',
+      isMailValidated: false,
+      createdAt: new Date('01-01-2023'),
+      updatedAt: new Date('01-01-2023'),
+    });
+
+    userCode = new UserCode();
+  });
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -34,10 +53,18 @@ describe('Create User Service', () => {
         CreateUserService,
         ConfigService,
         {
+          provide: getRepositoryToken(UserCode),
+          useValue: {
+            save: jest.fn(),
+            delete: jest.fn(),
+          },
+        },
+        {
           provide: getRepositoryToken(User),
           useValue: {
             save: jest.fn(),
             findOneBy: jest.fn(),
+            find: jest.fn(),
             update: jest.fn(),
           },
         },
@@ -49,14 +76,18 @@ describe('Create User Service', () => {
     }).compile();
 
     service = module.get<CreateUserService>(CreateUserService);
-    repository = module.get<Repository<User>>(getRepositoryToken(User));
+    usersRepository = module.get<Repository<User>>(getRepositoryToken(User));
+    userCodesRepository = module.get<Repository<UserCode>>(
+      getRepositoryToken(UserCode),
+    );
     mail = module.get<SendGridService>(SendGridService);
     config = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
-    expect(repository).toBeDefined();
+    expect(usersRepository).toBeDefined();
+    expect(userCodesRepository).toBeDefined();
   });
 
   /**
@@ -65,8 +96,8 @@ describe('Create User Service', () => {
    * should create a code for mail validation DONE
    * should send a mail with the code for validation && negation DONE
    * should verify received code with created code and save the
-   * user with {mailValidate: false} && negation
-   * should create user && negation
+   * user with {mailValidate: false} && negation DONE
+   * should create user && negation DONE
    */
 
   describe('validateReceivedData()', () => {
@@ -77,15 +108,15 @@ describe('Create User Service', () => {
     };
 
     it('should receive user data from request', async () => {
-      jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+      jest.spyOn(usersRepository, 'findOneBy').mockResolvedValue(null);
 
-      service.validateReceivedData(createUserDto).then((result) => {
-        expect(result).toEqual(createUserDto);
-      });
+      const result = await service.validateReceivedData(createUserDto);
+
+      expect(result).toEqual(createUserDto);
     });
 
     it('should throw an error if receive invalid params', async () => {
-      jest.spyOn(repository, 'findOneBy').mockResolvedValue(user);
+      jest.spyOn(usersRepository, 'findOneBy').mockResolvedValue(user);
 
       await expect(
         service.validateReceivedData(createUserDto),
@@ -93,34 +124,34 @@ describe('Create User Service', () => {
     });
   });
 
-  describe('createCodeForMailValidation()', () => {
-    it('should create a code for mail validation', () => {
-      const code = service.createCodeForMailValidation();
-
-      expect(code).toHaveLength(6);
-    });
-  });
-
   describe('sendMailValidationCode()', () => {
     it('should send a mail with the code for validation', async () => {
-      const code = '123456';
       const email = 'mail@mail.com';
 
-      jest.spyOn(service, 'createCodeForMailValidation').mockReturnValue(code);
+      jest.spyOn(usersRepository, 'findOneBy').mockResolvedValue(user);
+      jest.spyOn(userCodesRepository, 'save').mockResolvedValue(userCode);
       jest.spyOn(mail, 'send').getMockImplementation();
 
       const result = await service.sendMailValidationCode(email);
 
       expect(mail.send).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(`Mail sent to: ${email}, with code: ${code}`);
+      expect(result).toContain('Mail sent');
     });
 
     it('should throw an error if mail not sent', async () => {
-      const code = '123456';
       const email = 'mail@mail.com';
 
-      jest.spyOn(service, 'createCodeForMailValidation').mockReturnValue(code);
+      jest.spyOn(usersRepository, 'findOneBy').mockResolvedValue(user);
+      jest.spyOn(userCodesRepository, 'save').mockResolvedValue(userCode);
       jest.spyOn(mail, 'send').mockRejectedValue(new Error());
+
+      await expect(service.sendMailValidationCode(email)).rejects.toThrow();
+    });
+
+    it('should throw an error if user with received e-mail was not found', async () => {
+      const email = 'mail@mail.com';
+
+      jest.spyOn(usersRepository, 'findOneBy').mockResolvedValue(null);
 
       await expect(service.sendMailValidationCode(email)).rejects.toThrow();
     });
@@ -128,20 +159,7 @@ describe('Create User Service', () => {
 
   describe('createUser()', () => {
     it('should create user', async () => {
-      const createUserData: CreateUserDto = {
-        name: 'name',
-        email: 'email',
-        password: 'XXXXXXXX',
-      };
-
-      jest.spyOn(repository, 'save').mockResolvedValue(user);
-
-      const result = await service.createUser(createUserData);
-
-      expect(result).toEqual(user);
-    });
-
-    it('should throw an error if repository cannot create user', async () => {
+      const code = '123456';
       const createUserData: CreateUserDto = {
         name: 'name',
         email: 'email',
@@ -149,7 +167,28 @@ describe('Create User Service', () => {
       };
 
       jest
-        .spyOn(repository, 'save')
+        .spyOn(service, 'sendMailValidationCode')
+        .mockResolvedValue(`Mail sent to: ${user.email}, with code: ${code}`);
+      jest.spyOn(usersRepository, 'save').mockResolvedValue(user);
+
+      const result = await service.createUser(createUserData);
+
+      expect(result).toEqual(user);
+    });
+
+    it('should throw an error if usersRepository cannot create user', async () => {
+      const code = '123456';
+      const createUserData: CreateUserDto = {
+        name: 'name',
+        email: 'email',
+        password: 'XXXXXXXX',
+      };
+
+      jest
+        .spyOn(service, 'sendMailValidationCode')
+        .mockResolvedValue(`Mail sent to: ${user.email}, with code: ${code}`);
+      jest
+        .spyOn(usersRepository, 'save')
         .mockRejectedValueOnce(new QueryFailedError('query', [], 'message'));
 
       await expect(service.createUser(createUserData)).rejects.toThrow();
@@ -171,7 +210,6 @@ describe('Create User Service', () => {
   });
 
   describe('validateMail()', () => {
-    const code = '123456';
     const validatedUser = new User({
       id: 'id',
       name: 'name',
@@ -182,38 +220,36 @@ describe('Create User Service', () => {
       createdAt: new Date('01-01-2023'),
       updatedAt: new Date('01-01-2023'),
     });
+
     it('should verify received code with created code', async () => {
-      const expectedCode = code;
+      const code = userCode.code;
 
-      jest.spyOn(repository, 'findOneBy').mockResolvedValue(user);
-      jest.spyOn(repository, 'save').mockResolvedValue(validatedUser);
+      jest.spyOn(usersRepository, 'find').mockResolvedValue(Array.of(user));
+      jest.spyOn(userCodesRepository, 'save').mockResolvedValue(userCode);
+      jest.spyOn(usersRepository, 'save').mockResolvedValue(validatedUser);
+      jest.spyOn(userCode, 'createCode').mockReturnValue(code);
 
-      const result = await service.validateMail(
-        expectedCode,
-        code,
-        validatedUser.id,
-      );
+      const result = await service.validateMail(code, validatedUser.id);
 
       expect(result).toEqual(validatedUser);
     });
 
     it('should throw an error if user not found', async () => {
-      const expectedCode = code;
-
-      jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+      const code = userCode.code;
+      jest.spyOn(usersRepository, 'find').mockResolvedValue(null);
 
       await expect(
-        service.validateMail(expectedCode, code, validatedUser.id),
+        service.validateMail(code, validatedUser.id),
       ).rejects.toThrow();
     });
 
     it('should throw an error if code is invalid', async () => {
-      const expectedCode = '122233';
-
-      jest.spyOn(repository, 'findOneBy').mockResolvedValue(user);
+      const code = '123456';
+      jest.spyOn(usersRepository, 'find').mockResolvedValue(Array.of(user));
+      jest.spyOn(userCodesRepository, 'save').mockResolvedValue(null);
 
       await expect(
-        service.validateMail(expectedCode, code, validatedUser.id),
+        service.validateMail(code, validatedUser.id),
       ).rejects.toThrow();
     });
   });

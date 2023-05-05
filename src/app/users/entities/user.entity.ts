@@ -3,11 +3,14 @@ import {
   BeforeUpdate,
   Column,
   CreateDateColumn,
+  JoinColumn,
+  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { hashSync } from 'bcrypt';
 import { v4 as uuid } from 'uuid';
+import { UserCode } from './user-code.entity';
 
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -39,6 +42,10 @@ export class User {
     type: 'timestamp with time zone',
   })
   updatedAt: Date;
+
+  @OneToOne(() => UserCode)
+  @JoinColumn()
+  userCode?: UserCode;
 
   constructor(user?: Partial<User>) {
     this.id = user?.id;

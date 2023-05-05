@@ -1,6 +1,7 @@
 import { User } from './user.entity';
 import { hashSync } from 'bcrypt';
 import { v4 } from 'uuid';
+import { UserCode } from './user-code.entity';
 
 jest.mock('uuid', () => ({
   v4: jest.fn(),
@@ -19,6 +20,7 @@ describe('User Entity', () => {
     password: 'password',
     createdAt: new Date('01-01-2023'),
     updatedAt: new Date('01-01-2023'),
+    userCode: new UserCode(),
   });
 
   it('should have an id property', () => {
